@@ -14,6 +14,7 @@ class IByteStream {
     ~IByteStream();
     std::size_t size() const;
     const uint8_t &operator[](std::size_t index) const;
+    const uint8_t *map() const;
 };
 
 class OByteStream {

@@ -45,6 +45,8 @@ const uint8_t &IByteStream::operator[](std::size_t index) const {
     return bs_[index];
 }
 
+const uint8_t *IByteStream::map() const { return bs_; }
+
 /**
  * OByteStream
  */

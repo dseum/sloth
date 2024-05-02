@@ -3,9 +3,9 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <queue>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "utils/bit_vector.hpp"
 
@@ -42,24 +42,6 @@ struct Node {
 };
 using PackageArray = std::pair<Package *, std::size_t>;
 using NodeArray = std::pair<Node *, std::size_t>;
-
-class PriorityQueue {
-    struct Comparator {
-        bool operator()(const Node *lhs, const Node *rhs) const;
-    };
-
-   public:
-    using data_type =
-        std::priority_queue<Node *, std::vector<Node *>, Comparator>;
-    PriorityQueue(NodeArray nodes);
-    Node *pop();
-    std::pair<Node *, Node *> pop_pair();
-    void push(Node *node);
-    data_type::size_type size() const;
-
-   private:
-    data_type pq_;
-};
 
 namespace Serial {
 class Processor {

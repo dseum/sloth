@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <map>
 #include <stack>
 #include <vector>
 
@@ -37,50 +38,10 @@ void Package::add(Package &rhs) {
  * Node
  */
 
-Node::Node() : left_(nullptr), right_(nullptr), weight_(0), value_(0) {}
+Node::Node() : left_(nullptr), right_(nullptr), value_(0) {}
 
 Node::Node(uint8_t value, std::size_t weight, Node *left, Node *right)
-    : left_(left), right_(right), weight_(weight), value_(value) {}
-
-bool Node::operator<(const Node &rhs) const { return weight_ < rhs.weight_; }
-
-bool Node::operator==(const Node &rhs) const { return weight_ == rhs.weight_; }
-
-/**
- * HuffmanCoding::PriorityQueue
- */
-
-bool PriorityQueue::Comparator::operator()(
-    const HuffmanCoding::Node *lhs, const HuffmanCoding::Node *rhs) const {
-    return *lhs < *rhs;
-}
-
-PriorityQueue::PriorityQueue(NodeArray na) {
-    std::vector<Node *> container;
-    container.reserve(na.second);
-    for (std::size_t i = 0; i < na.second; ++i) {
-        container.push_back(&na.first[i]);
-    }
-    pq_ = data_type(Comparator(), std::move(container));
-}
-
-Node *PriorityQueue::pop() {
-    Node *top = pq_.top();
-    pq_.pop();
-    return top;
-}
-
-std::pair<Node *, Node *> PriorityQueue::pop_pair() {
-    Node *top = pop();
-    Node *second = pop();
-    return {top, second};
-}
-
-void PriorityQueue::push(Node *node) { pq_.push(node); }
-
-PriorityQueue::data_type::size_type PriorityQueue::size() const {
-    return pq_.size();
-}
+    : left_(left), right_(right), value_(value) {}
 
 /**
  * Processor
@@ -215,7 +176,7 @@ void Serial::Processor::encode(std::string pathname,
 void Serial::Processor::decode(std::string encoded_pathname,
                                std::string pathname) {
     IByteStream ibs(encoded_pathname);
-    uint8_t *ibs_map = ibs.map();
+    const uint8_t *ibs_map = ibs.map();
 
     std::size_t original_size = 0;
     std::memcpy(&original_size, ibs_map, 8);
@@ -234,7 +195,7 @@ void Serial::Processor::decode(std::string encoded_pathname,
             for (std::size_t i = 0; i < 256; ++i) {
                 symbols.emplace_back(i, code_sizes[i]);
             }
-            std::erase(
+            symbols.erase(
                 std::remove_if(symbols.begin(), symbols.end(),
                                [](const Symbol &s) { return s.length_ == 0; }),
                 symbols.end());
