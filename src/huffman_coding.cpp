@@ -410,7 +410,6 @@ void Parallel::Processor::encode(std::string pathname,
 
 void Parallel::Processor::decode(std::string encoded_pathname,
                                  std::string decoded_pathname) {
-    Bench bench;
     IByteStream ibs(encoded_pathname);
     const uint8_t *ibs_map = ibs.map();
     size_t encoded_size = ibs.size();
@@ -459,10 +458,7 @@ void Parallel::Processor::decode(std::string encoded_pathname,
                 barriers[i] = {symbol.value_, code.size()};
             }
         }
-        println("Header/Elapsed {}", bench.format());
-
         if (decoded_size > Sizes::page * 4) {
-            Bench bench1;
             std::size_t intervals_size =
                 (decoded_size + Sizes::page - 1) / Sizes::page;
             std::tuple<size_t, size_t> *intervals =
@@ -474,13 +470,11 @@ void Parallel::Processor::decode(std::string encoded_pathname,
                     intervals[i / Sizes::page] = {i, bits_read};
                     for (std::size_t j = i;
                          j < i + Sizes::page && j < decoded_size; ++j) {
-                        std::size_t byte_offset = bits_read / 8;
+                        std::size_t bytes_read = bits_read / 8;
 
-                        uint8_t byte_1 = ibs[byte_offset];
-                        uint8_t byte_2 = 0;
-                        if (byte_offset - 1 < encoded_size) {
-                            byte_2 = ibs[byte_offset + 1];
-                        }
+                        uint8_t byte_1 = ibs[bytes_read];
+                        uint8_t byte_2 =
+                            ibs[bytes_read + (bytes_read - 1 < encoded_size)];
 
                         std::size_t bit_offset = bits_read % 8;
                         byte_1 <<= bit_offset;
@@ -493,7 +487,6 @@ void Parallel::Processor::decode(std::string encoded_pathname,
                     }
                 }
             }
-            println("Preprocess/Elapsed {}", bench1.format());
 
             OByteStream obs(decoded_pathname + ".res", decoded_size);
             uint8_t *obs_map = obs.map();
