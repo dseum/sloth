@@ -24,10 +24,10 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
     std::string command(argv[1]);
-    if (command == "generate") {
+    if (command == "test") {
         if (argc < 4) {
             print_usage(
-                "generate requires a file name and at least 1 factor in 0.5GB");
+                "test requires a file name and at least 1 factor in 0.5GB");
             return EXIT_FAILURE;
         }
         std::string pathname = argv[2];
@@ -38,9 +38,9 @@ int main(int argc, char** argv) {
             TestFile::generate(pathname + std::to_string(factor), 5e8 * factor);
             print("Generated {} in {}\n", factor, bench.format());
         }
-    } else if (command == "compress") {
+    } else if (command == "zip") {
         if (argc < 3) {
-            print_usage("encode requires at least 1 file name");
+            print_usage("zip requires at least 1 file name");
             return EXIT_FAILURE;
         }
 
@@ -58,6 +58,9 @@ int main(int argc, char** argv) {
                         parallel = true;
                         break;
                     }
+                    case '?': {
+                        return EXIT_FAILURE;
+                    }
                 }
             } else {
                 pathnames.emplace_back(argv[optind]);
@@ -72,7 +75,6 @@ int main(int argc, char** argv) {
                 print("Zipped {} in {}\n", pathname, bench.format());
             }
         } else {
-#pragma omp parallel for
             for (const std::string& pathname : pathnames) {
                 Bench bench;
                 HuffmanCoding::Serial::Processor::encode(
@@ -109,6 +111,9 @@ int main(int argc, char** argv) {
                         parallel = true;
                         break;
                     }
+                    case '?': {
+                        return EXIT_FAILURE;
+                    }
                 }
             } else {
                 pathnames.emplace_back(argv[optind]);
@@ -122,14 +127,12 @@ int main(int argc, char** argv) {
                 print("Unzipped {} in {}\n", pathname, bench.format());
             }
         } else {
-#pragma omp parallel for
             for (const std::string& pathname : pathnames) {
                 Bench bench;
                 HuffmanCoding::Serial::Processor::decode(pathname, pathname);
                 print("Unzipped {} in {}\n", pathname, bench.format());
             }
         }
-
     } else {
         print_usage();
         return EXIT_FAILURE;

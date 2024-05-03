@@ -16,7 +16,7 @@ DEPS = $(patsubst $(SRC_DIR)/%.cpp, $(DEPS_DIR)/%.d, $(SRCS))
 PRE_DIRS = $(patsubst %/, %, $(sort $(dir $(OBJS) $(DEPS))))
 
 # flags
-DEBUG ?= 1
+DEBUG ?= 0
 ifeq ($(DEBUG), 1)
 	CXXFLAGS += -g -O0
 else
