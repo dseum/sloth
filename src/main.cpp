@@ -66,8 +66,10 @@ int main(int argc, char** argv) {
         }
         if (parallel) {
             for (const std::string& pathname : pathnames) {
+                Bench bench;
                 HuffmanCoding::Parallel::Processor::encode(
                     pathname, pathname + file_extension);
+                print("Zipped {} in {}\n", pathname, bench.format());
             }
         } else {
 #pragma omp parallel for
@@ -75,12 +77,12 @@ int main(int argc, char** argv) {
                 Bench bench;
                 HuffmanCoding::Serial::Processor::encode(
                     pathname, pathname + file_extension);
-                print("Encoded {} in {}\n", pathname, bench.format());
+                print("Zipped {} in {}\n", pathname, bench.format());
             }
         }
-    } else if (command == "decompress") {
+    } else if (command == "unzip") {
         if (argc < 3) {
-            print_usage("decompress requires at least 1 file name");
+            print_usage("unzip requires at least 1 file name");
             return EXIT_FAILURE;
         }
 
@@ -89,7 +91,7 @@ int main(int argc, char** argv) {
             if (pathname.size() < file_extension.size() ||
                 pathname.substr(pathname.size() - file_extension.size()) !=
                     file_extension) {
-                print_usage("decompress requires a file with the extension " +
+                print_usage("unzip requires a file with the extension " +
                             file_extension);
                 return EXIT_FAILURE;
             }
@@ -115,14 +117,16 @@ int main(int argc, char** argv) {
         }
         if (parallel) {
             for (const std::string& pathname : pathnames) {
+                Bench bench;
                 HuffmanCoding::Parallel::Processor::decode(pathname, pathname);
+                print("Unzipped {} in {}\n", pathname, bench.format());
             }
         } else {
 #pragma omp parallel for
             for (const std::string& pathname : pathnames) {
                 Bench bench;
                 HuffmanCoding::Serial::Processor::decode(pathname, pathname);
-                print("Encoded {} in {}\n", pathname, bench.format());
+                print("Unzipped {} in {}\n", pathname, bench.format());
             }
         }
 
