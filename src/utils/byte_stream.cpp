@@ -77,20 +77,4 @@ OByteStream::~OByteStream() {
 
 std::size_t OByteStream::size() const { return size_; }
 
-uint8_t *OByteStream::truncate(std::size_t size) {
-    if (ftruncate(fd_, size) == -1) {
-        println("Error: {}", strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-    munmap(bs_, size_);
-    size_ = size;
-    bs_ = static_cast<uint8_t *>(
-        mmap(bs_, size_, PROT_WRITE, MAP_SHARED, fd_, 0));
-    if (bs_ == MAP_FAILED) {
-        println("Error: {}", strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-    return map();
-}
-
 uint8_t *OByteStream::map() { return bs_; }

@@ -15,33 +15,108 @@
 
 namespace HuffmanCoding {
 /**
- * Package
+ * Symbol
  */
 
-Package::Package() : weight_(0), value_(0) {}
+Symbols::PackageMergeItem::PackageMergeItem() : weight_(0) {}
 
-Package::Package(uint8_t value, std::size_t weight, Package *self)
-    : weight_(weight), value_(value) {
-    within_.push_back(self);
+Symbols::PackageMergeItem::PackageMergeItem(Symbol *symbol)
+    : weight_(symbol->weight_) {
+    symbols_.push_back(symbol);
 }
 
-bool Package::operator<(const Package &rhs) const {
+bool Symbols::PackageMergeItem::operator<(const PackageMergeItem &rhs) const {
     return weight_ < rhs.weight_;
 }
 
-void Package::add(Package &rhs) {
-    within_.insert(within_.end(), rhs.within_.begin(), rhs.within_.end());
-    weight_ += rhs.weight_;
+Symbols::PackageMergeItem Symbols::PackageMergeItem::operator+(
+    const PackageMergeItem &rhs) const {
+    PackageMergeItem item;
+    item.symbols_.reserve(symbols_.size() + rhs.symbols_.size());
+    item.symbols_.insert(item.symbols_.end(), symbols_.begin(), symbols_.end());
+    item.symbols_.insert(item.symbols_.end(), rhs.symbols_.begin(),
+                         rhs.symbols_.end());
+    item.weight_ = weight_ + rhs.weight_;
+    return item;
 }
 
-/**
- * Node
- */
+Symbols::Symbols() : symbols_(nullptr), size_(0) {}
 
-Node::Node() : left_(nullptr), right_(nullptr), value_(0) {}
+Symbols::~Symbols() { delete[] symbols_; }
 
-Node::Node(uint8_t value, std::size_t weight, Node *left, Node *right)
-    : left_(left), right_(right), value_(value) {}
+Symbol &Symbols::operator[](std::size_t index) { return symbols_[index]; }
+
+void Symbols::initialize(std::size_t size) {
+    assert(symbols_ == nullptr);
+    symbols_ = new Symbol[size];
+    size_ = size;
+}
+
+void Symbols::fill_lengths() {
+    if (size_ == 1) {
+        return;
+    }
+    std::size_t cutoff = 2 * size_ - 2;
+    std::vector<PackageMergeItem> items;
+    items.reserve(size_);
+    for (std::size_t i = 0; i < size_; ++i) {
+        items.emplace_back(&symbols_[i]);
+    }
+    while (items.size() < cutoff) {
+        std::sort(items.begin(), items.end());
+        std::vector<PackageMergeItem> packaged_items;
+        packaged_items.reserve(items.size() / 2);
+        std::size_t i;
+        for (i = 0; i < items.size() - 2; i += 2) {
+            packaged_items.push_back(std::move(items[i] + items[i + 1]));
+        }
+        if ((items.size() & 1) == 0) {
+            packaged_items.push_back(std::move(items[i] + items[i + 1]));
+        }
+        items.swap(packaged_items);
+        for (std::size_t i = 0; i < size_; ++i) {
+            items.emplace_back(&symbols_[i]);
+        }
+    }
+    std::sort(items.begin(), items.end());
+    for (std::size_t i = 0; i < cutoff; ++i) {
+        for (Symbol *&symbol : items[i].symbols_) {
+            ++symbol->length_;
+        }
+    }
+}
+
+BitVector *Symbols::generate_codes() {
+    BitVector *codes = new BitVector[256];
+
+    if (size_ == 0) {
+        codes[symbols_[0].value_].zero(1);
+        return codes;
+    }
+
+    BitVector code;
+    std::sort(symbols_, symbols_ + size_,
+              [](const Symbol &lhs, const Symbol &rhs) {
+                  if (lhs.length_ == rhs.length_) {
+                      return lhs.value_ < rhs.value_;
+                  }
+                  return lhs.length_ < rhs.length_;
+              });
+    code.zero(symbols_[0].length_);
+    std::size_t i;
+    for (i = 0; i < size_ - 1; ++i) {
+        codes[symbols_[i].value_] = code;
+        std::size_t length = symbols_[i + 1].length_;
+        assert(length > 0 && length <= 16);
+        code.next(length);
+    }
+    codes[symbols_[size_ - 1].value_] = code;
+    return codes;
+}
+
+Symbol *Symbols::data() { return symbols_; }
+
+std::size_t Symbols::size() const { return size_; }
 
 /**
  * Processor
@@ -51,178 +126,152 @@ void Serial::Processor::encode(std::string pathname,
                                std::string encoded_pathname) {
     IByteStream ibs(pathname);
 
-    PackageArray pkgs;
+    Symbols symbols;
     {
-        std::array<std::size_t, 256> counts;  // assuming only ASCII
-        counts.fill(0);
-
+        std::array<std::size_t, 256> counts = {0};  // assuming only ASCII
         for (std::size_t i = 0; i < ibs.size(); ++i) {
             ++counts[ibs[i]];
         }
-
-        pkgs.second = 256 - std::count(counts.begin(), counts.end(), 0);
-        pkgs.first = new Package[pkgs.second];
+        symbols.initialize(256 - std::count(counts.begin(), counts.end(), 0));
         for (std::size_t i = 0, end = 0; i < 256; ++i) {
             if (counts[i] != 0) {
-                print("{}: {}; ", i, counts[i]);
                 std::size_t j = end++;
-                pkgs.first[j] = Package(i, counts[i], &pkgs.first[j]);
+                symbols[j] = {
+                    .weight_ = counts[i],
+                    .value_ = static_cast<uint8_t>(i),
+                    .length_ = 0,
+                };
             }
         }
-        print("\n");
     }
 
-    // makes codes
-    std::array<BitVector, 256> codes;
+    symbols.fill_lengths();
+    BitVector *codes = symbols.generate_codes();
+
+    // write
     {
-        std::size_t min_pkgs = 2 * pkgs.second - 2;
-        if (min_pkgs == 0) {
-            codes[pkgs.first[0].value_].zero();
-        } else {
-            std::vector<Package> viewer(pkgs.first, pkgs.first + pkgs.second);
-            while (viewer.size() < min_pkgs) {
-                std::sort(viewer.begin(), viewer.end());
-                std::size_t i;
-                std::vector<Package> new_viewer;
-                new_viewer.reserve(viewer.size() / 2);
-                for (i = 0; i < viewer.size() - 2; i += 2) {
-                    viewer[i].add(viewer[i + 1]);
-                    new_viewer.push_back(viewer[i]);
-                }
-                if ((viewer.size() & 1) == 0) {
-                    viewer[i].add(viewer[i + 1]);
-                    new_viewer.push_back(viewer[i]);
-                }
-                viewer.swap(new_viewer);
-                viewer.insert(viewer.end(), pkgs.first,
-                              pkgs.first + pkgs.second);
+        std::size_t encoded_size;
+        {
+            std::size_t bits_used = header_bits;
+            for (std::size_t i = 0; i < symbols.size(); ++i) {
+                bits_used += symbols[i].weight_ * symbols[i].length_;
             }
-            std::sort(viewer.begin(), viewer.end());
-            for (Package &pkg : viewer) {
-                for (Package *&value : pkg.within_) {
-                    ++value->length_;
-                }
-            }
-            std::sort(pkgs.first, pkgs.first + pkgs.second,
-                      [](const Package &lhs, const Package &rhs) {
-                          if (lhs.length_ == rhs.length_) {
-                              return lhs.value_ < rhs.value_;
-                          }
-                          return lhs.length_ < rhs.length_;
-                      });
-            // always should be some value with length = 0
-            BitVector code;
-            code.zero();
-            for (std::size_t i = 0; i < min_pkgs - 1; ++i) {
-                codes[pkgs.first[i].value_] = code;
-                code.next(pkgs.first[i + 1].length_);
-            }
-            codes[pkgs.first[min_pkgs - 1].value_] = code;
+            encoded_size = (bits_used + 7) / 8;
         }
-        delete[] pkgs.first;
-    }
+        if (encoded_size > ibs.size()) {
+            println(
+                "sloth: compressed file will be larger than original "
+                "hahaha");
+        }
 
-    // output
-    {
-        std::size_t max_size = ibs.size();
-        OByteStream obs(encoded_pathname, max_size);
+        OByteStream obs(encoded_pathname, encoded_size);
         uint8_t *obs_map = obs.map();
 
         // header
         {
             /*
-             * 0-7: original size
-             * 8: padding
-             * 9-264: code sizes
+             * 0-7: old size
+             * 8-263: code lengths
              */
-            std::memcpy(obs_map, &max_size, 8);
+            std::size_t old_size = ibs.size();
+            std::memcpy(obs_map, &old_size, 8);
 
             // trie using DEFLATE spec
             // https://www.ietf.org/rfc/rfc1951.txt
             for (std::size_t i = 0; i < 256; ++i) {
                 uint8_t code_size =
                     codes[i].size();  // max code size is 255 since ASCII
-                std::memcpy(obs_map + i + 8 + 1, &code_size, 1);
+                std::memcpy(obs_map + i + 8, &code_size, 1);
             }
         }
 
         // body
-        std::size_t bits_used = 8 + 1 + 256;
+        std::size_t bits_used = header_bits;
         for (std::size_t i = 0; i < ibs.size(); ++i) {
-            uint8_t val = ibs[i];
-            BitVector &code = codes[val];
-            std::size_t bytes_i = bits_used / 8;
-            std::size_t new_size = (bits_used + code.size() + 7) / 8;
-            if (new_size > max_size) {
-                max_size = std::max(max_size * 2, new_size);
-                obs_map = obs.truncate(max_size *= 2);
-            }
-            code.copy(obs_map + bytes_i, bits_used % 8);
+            uint8_t value = ibs[i];
+            BitVector &code = codes[value];
+            code.copy(obs_map + bits_used / 8, bits_used % 8);
             bits_used += code.size();
         }
-        uint8_t padding = (8 - bits_used % 8) % 8;
-        std::memcpy(obs_map, &padding, 1);
-
-        std::size_t new_size = (bits_used + 7) / 8;
-        obs.truncate(new_size);
-        if (new_size > obs.size()) {
-            println(
-                "sloth: compressed file will be larger than original "
-                "hahaha");
-        }
+        assert(encoded_size == (bits_used + 7) / 8);
+        println("sloth: Compression ratio: {:.2f}",
+                ibs.size() / static_cast<double>(encoded_size));
     }
 }
 
 void Serial::Processor::decode(std::string encoded_pathname,
-                               std::string pathname) {
+                               std::string decoded_pathname) {
     IByteStream ibs(encoded_pathname);
     const uint8_t *ibs_map = ibs.map();
 
-    std::size_t original_size = 0;
-    std::memcpy(&original_size, ibs_map, 8);
+    std::size_t decoded_size = 0;
+    std::memcpy(&decoded_size, ibs_map, 8);
 
-    uint8_t padding = 0;
-    std::memcpy(&padding, ibs_map + 8, 1);
-
-    std::vector<uint8_t> code_sizes;
-    std::memcpy(code_sizes.data(), ibs_map + 9, 256);
-
-    std::map<uint16_t, uint8_t> code_map;
+    std::array<uint8_t, 256> code_lengths;
+    std::memcpy(code_lengths.data(), ibs_map + 8, 256);
     {
-        BitVector codes[256];
+        std::pair<uint8_t, std::size_t> barriers[256] = {{0, 0}};
+        Symbols symbols;
+        symbols.initialize(
+            256 - std::count(code_lengths.begin(), code_lengths.end(), 0));
+        for (std::size_t i = 0, symbols_i = 0; i < 256; ++i) {
+            if (code_lengths[i] != 0) {
+                symbols[symbols_i++] = {
+                    .weight_ = 0,
+                    .value_ = static_cast<uint8_t>(i),
+                    .length_ = code_lengths[i],
+                };
+            }
+        }
+        BitVector *codes = symbols.generate_codes();
+        for (std::size_t i = 0; i < symbols.size() - 1; ++i) {
+            uint8_t value_a = symbols[i].value_;
+            BitVector &code_a = codes[value_a];
+            uint8_t barrier_a = static_cast<uint8_t>(code_a.value())
+                                << (8 - code_a.size());
+
+            uint8_t value_b = symbols[i + 1].value_;
+            BitVector &code_b = codes[value_b];
+            uint8_t barrier_b = static_cast<uint8_t>(code_b.value())
+                                << (8 - code_b.size());
+
+            for (uint8_t j = barrier_a; j < barrier_b; ++j) {
+                barriers[j] = {value_a, code_a.size()};
+            }
+        }
         {
-            std::vector<Symbol> symbols;
-            for (std::size_t i = 0; i < 256; ++i) {
-                symbols.emplace_back(i, code_sizes[i]);
-            }
-            symbols.erase(
-                std::remove_if(symbols.begin(), symbols.end(),
-                               [](const Symbol &s) { return s.length_ == 0; }),
-                symbols.end());
-            std::sort(symbols.begin(), symbols.end(),
-                      [](const Symbol &lhs, const Symbol &rhs) {
-                          if (lhs.length_ == rhs.length_) {
-                              return lhs.value_ < rhs.value_;
-                          }
-                          return lhs.length_ < rhs.length_;
-                      });
-            BitVector code;
-            code.zero();
-            for (std::size_t i = 0; i < symbols.size() - 1; ++i) {
-                codes[symbols[i].value_] = code;
-                code.next(symbols[i + 1].length_);
-            }
-            codes[symbols[symbols.size() - 1].value_] = code;
+            Symbol &symbol = symbols[symbols.size() - 1];
+            barriers[255] = {symbol.value_, symbol.length_};
         }
 
-        for (std::size_t i = 0; i < 256; ++i) {
-            BitVector &code = codes[i];
-            code_map[code.bits() << (16 - code.size())] = i;
+        OByteStream obs(decoded_pathname + ".res", decoded_size);
+        uint8_t *obs_map = obs.map();
+
+        std::size_t read_bits = header_bits;
+        for (size_t i = 0; i < decoded_size; i++) {
+            uint8_t byte_1 = 0;
+            uint8_t byte_2 = 0;
+
+            std::size_t byte_offset = read_bits / 8;
+            std::memcpy(&byte_1, (ibs_map + byte_offset), 1);
+            std::memcpy(&byte_2, (ibs_map + byte_offset + 1), 1);
+
+            std::size_t bit_offset = read_bits % 8;
+            byte_1 <<= bit_offset;
+            byte_2 >>= (8 - bit_offset);
+            uint8_t byte = byte_1 | byte_2;
+
+            std::pair<uint8_t, std::size_t> barrier = barriers[byte];
+            std::memcpy(obs_map + i, &(barrier.first), 1);
+            read_bits += barrier.second;
         }
     }
 }
 
 void Parallel::Processor::encode(std::string pathname,
                                  std::string encoded_pathname) {}
+
+void Parallel::Processor::decode(std::string encoded_pathname,
+                                 std::string pathname) {}
 
 }  // namespace HuffmanCoding

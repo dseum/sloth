@@ -26,7 +26,6 @@ class OByteStream {
     OByteStream(std::string pathname, std::size_t size);
     ~OByteStream();
     std::size_t size() const;
-    uint8_t *truncate(std::size_t size);
     uint8_t *map();
 };
 

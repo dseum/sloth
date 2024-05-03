@@ -20,7 +20,7 @@ DEBUG ?= 1
 ifeq ($(DEBUG), 1)
 	CXXFLAGS += -g -O0
 else
-	CXXFLAGS += -DNDEBUG -O3
+	CXXFLAGS += -DNDEBUG -O3 -march=native
 endif
 
 # targets

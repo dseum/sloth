@@ -7,36 +7,57 @@
 #include "print.hpp"
 
 void BitVector::copy(uint8_t *dest, std::size_t bit_offset) const {
-    assert(size() < 16);
-    uint8_t byte_val = 0;
-    std::memcpy(&byte_val, dest, 1);
-    std::size_t bit_write_size = 8 - bit_offset;
-    byte_val =
-        (byte_val & mask_first[bit_offset]) |
-        uint8_t((bits_ & mask_first[bit_write_size]) >> (16 - bit_write_size));
-    std::memcpy(dest, &byte_val, 1);
+    // index of the next bit to write; also the number of bits written
 
-    if (size() <= bit_write_size) return;
-    byte_val =
-        uint8_t((bits_ & mask_middle[bit_write_size]) >> (8 - bit_write_size));
-    std::memcpy(dest + 1, &byte_val, 1);
+    uint16_t bits = bits_;
+    bits <<= 16 - size();  // left align
 
-    if (size() <= bit_write_size + 8) return;
-    byte_val = uint8_t((bits_ & mask_last[8 - bit_write_size])
-                       << (8 + bit_write_size));
-    std::memcpy(dest + 2, &byte_val, 1);
+    std::size_t bit_left = 8 - bit_offset;
+
+    uint8_t byte_value = 0;
+    std::memcpy(&byte_value, dest, 1);
+    byte_value = (byte_value | uint16_mask_first[bit_offset]) |
+                 static_cast<uint8_t>((bits & uint16_mask_first[bit_left]) >>
+                                      (16 - bit_left));
+    std::memcpy(dest, &byte_value, 1);
+
+    if (size() <= bit_left) return;
+    bits <<= bit_left;
+    byte_value = static_cast<uint8_t>((bits & uint16_mask_first[8]) >> 8);
+    std::memcpy(dest + 1, &byte_value, 1);
+
+    if (size() <= bit_left + 8) return;
+    bits <<= 8;
+    byte_value = static_cast<uint8_t>(bits >> 8);
+    std::memcpy(dest + 2, &byte_value, 1);
 }
 
-void BitVector::zero() {
+void BitVector::set(uint8_t bits) {
+    bits_ = bits;
+    size_ = 8;
+    encoded_ = false;
+}
+
+void BitVector::zero(std::size_t size) {
     bits_ = 0;
-    size_ = 1;
+    size_ = size;
+    encoded_ = true;
 }
 
 void BitVector::next(std::size_t new_size) {
+    assert(new_size <= 16);
     bits_ = (bits_ + 1) << (new_size - size_);
     size_ = new_size;
 }
 
 std::size_t BitVector::size() const { return size_; }
 
-uint16_t BitVector::bits() const { return bits_; }
+uint16_t BitVector::value() const { return bits_; }
+
+std::string BitVector::to_string() const {
+    std::string s;
+    for (std::size_t i = 0; i < size(); ++i) {
+        s += (bits_ & (1 << (size() - i - 1))) ? '1' : '0';
+    }
+    return s;
+}

@@ -10,6 +10,8 @@
 #include "utils/bench.hpp"
 #include "utils/print.hpp"
 
+constexpr std::string file_extension = ".sloth";
+
 void print_usage(std::string error = "") {
     print("\n{}\n{}{}\n", "Usage: sloth [COMMAND] [OPTIONS...]",
           "    It's a sloth... what did you expect?",
@@ -36,9 +38,9 @@ int main(int argc, char** argv) {
             TestFile::generate(pathname + std::to_string(factor), 5e8 * factor);
             print("Generated {} in {}\n", factor, bench.format());
         }
-    } else if (command == "process") {
+    } else if (command == "compress") {
         if (argc < 3) {
-            print_usage("process requires at least 1 file name");
+            print_usage("encode requires at least 1 file name");
             return EXIT_FAILURE;
         }
 
@@ -64,18 +66,66 @@ int main(int argc, char** argv) {
         }
         if (parallel) {
             for (const std::string& pathname : pathnames) {
-                HuffmanCoding::Parallel::Processor::encode(pathname,
-                                                           pathname + ".sloth");
+                HuffmanCoding::Parallel::Processor::encode(
+                    pathname, pathname + file_extension);
             }
         } else {
 #pragma omp parallel for
             for (const std::string& pathname : pathnames) {
                 Bench bench;
-                HuffmanCoding::Serial::Processor::encode(pathname,
-                                                         pathname + ".sloth");
+                HuffmanCoding::Serial::Processor::encode(
+                    pathname, pathname + file_extension);
                 print("Encoded {} in {}\n", pathname, bench.format());
             }
         }
+    } else if (command == "decompress") {
+        if (argc < 3) {
+            print_usage("decompress requires at least 1 file name");
+            return EXIT_FAILURE;
+        }
+
+        std::vector<std::string> pathnames;
+        for (std::string& pathname : pathnames) {
+            if (pathname.size() < file_extension.size() ||
+                pathname.substr(pathname.size() - file_extension.size()) !=
+                    file_extension) {
+                print_usage("decompress requires a file with the extension " +
+                            file_extension);
+                return EXIT_FAILURE;
+            }
+        }
+        bool parallel = false;
+
+        static struct option long_options[] = {
+            {"parallel", no_argument, 0, 'p'}, {0, 0, 0, 0}};
+        char c;
+        optind = 2;
+        while (optind < argc) {
+            if ((c = getopt_long(argc, argv, "p", long_options, 0)) != -1) {
+                switch (c) {
+                    case 'p': {
+                        parallel = true;
+                        break;
+                    }
+                }
+            } else {
+                pathnames.emplace_back(argv[optind]);
+                ++optind;
+            }
+        }
+        if (parallel) {
+            for (const std::string& pathname : pathnames) {
+                HuffmanCoding::Parallel::Processor::decode(pathname, pathname);
+            }
+        } else {
+#pragma omp parallel for
+            for (const std::string& pathname : pathnames) {
+                Bench bench;
+                HuffmanCoding::Serial::Processor::decode(pathname, pathname);
+                print("Encoded {} in {}\n", pathname, bench.format());
+            }
+        }
+
     } else {
         print_usage();
         return EXIT_FAILURE;

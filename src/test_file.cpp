@@ -18,10 +18,10 @@ void TestFile::generate(std::string pathname, std::size_t size) {
 
     std::random_device rd;
     std::mt19937_64 gen(rd());
-    std::poisson_distribution<uint64_t> dis(uint32_t(-1));
+    std::poisson_distribution<uint64_t> dis(6);
 
     for (std::size_t i = 0; i < obs.size() / 8; ++i) {
-        uint64_t val = dis(gen) % 26;
+        uint64_t val = dis(gen);
         std::memcpy(obs_map + 8 * i, &val, 8);
     }
     {

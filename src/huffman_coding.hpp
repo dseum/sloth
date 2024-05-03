@@ -12,36 +12,37 @@
 namespace HuffmanCoding {
 
 struct Symbol {
-    uint8_t value_ = 0;
-    uint8_t length_ = 0;
-};
-
-struct Package {
-    std::vector<Package *> within_;
-    std::size_t weight_;
+    uint64_t weight_;
     uint8_t value_;
-    uint8_t length_ = 0;
-
-    Package();
-    Package(uint8_t value, std::size_t weight, Package *self = nullptr);
-    bool operator<(const Package &rhs) const;
-    void add(Package &rhs);
+    uint8_t length_;
 };
 
-struct Node {
-    Node *left_;
-    Node *right_;
-    uint8_t value_;
-    BitVector code_;
+class Symbols {
+    struct PackageMergeItem {
+        std::vector<Symbol *> symbols_;
+        std::size_t weight_;
 
-    Node();
-    Node(uint8_t value, std::size_t weight, Node *left = nullptr,
-         Node *right = nullptr);
-    bool operator<(const Node &rhs) const;
-    bool operator==(const Node &rhs) const;
+        PackageMergeItem();
+        PackageMergeItem(Symbol *symbol);
+        bool operator<(const PackageMergeItem &rhs) const;
+        PackageMergeItem operator+(const PackageMergeItem &rhs) const;
+    };
+
+    Symbol *symbols_;
+    std::size_t size_;
+
+   public:
+    Symbols();
+    ~Symbols();
+    Symbol *data();
+    Symbol &operator[](std::size_t index);
+    void initialize(std::size_t size);
+    std::size_t size() const;
+    void fill_lengths();
+    BitVector *generate_codes();
 };
-using PackageArray = std::pair<Package *, std::size_t>;
-using NodeArray = std::pair<Node *, std::size_t>;
+
+constexpr std::size_t header_bits = (8 + 256) * 8;
 
 namespace Serial {
 class Processor {
